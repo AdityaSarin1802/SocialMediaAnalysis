@@ -1,0 +1,102 @@
+# Final Algorithm: One-Tap AI Verification for Social Media
+### (Misinformation, Bots, Scams, Manipulated Media, and Nearby Disasters)
+### Tech stack: Python for the AI/analysis layer, MongoDB for storage
+
+---
+
+## 1. Overview
+
+The system lets a person tap a single button while looking at content on X, Instagram, WhatsApp, or Facebook — a post, message, image, video, reel, voice note, or link — and receive a plain verdict: **Likely Authentic, Unverifiable, Likely Misinformation, or High-Risk (Scam/Bot/Fabricated)**, along with a short list of reasons.
+
+The system has six stages: Capture, Extraction, Parallel Analysis, Aggregation, Presentation, and Feedback. Python handles all analysis logic and orchestration; MongoDB stores everything that needs to persist — captured content records, analysis results, cached evidence, account risk histories, and user feedback.
+
+---
+
+## 2. Stage One: Capture
+
+When the button is pressed, the system captures whatever is currently on screen.
+
+- On mobile, this happens either through an accessibility permission that reads the visible screen content, or through the app's native "share to" function, which hands the specific post, image, video, or voice note directly to the tool without needing to read the whole screen.
+- Inside a browser, the tool reads the actual page structure of the site (X or Facebook web), which is more reliable than reading pixels, since it gives clean text, links, and account handles directly.
+- The capture always records which source app the content came from, since WhatsApp, Instagram, X, and Facebook each require different follow-up handling.
+- The raw capture — screenshot, extracted text, or shared media file — is temporarily held in memory for processing and is not permanently stored unless the person chooses to submit it for report or review.
+
+---
+
+## 3. Stage Two: Extraction
+
+The raw capture is converted into structured pieces the analysis stage can work with.
+
+- Any visible text is pulled out, either directly (from a browser page) or through image-to-text reading (for screenshots and reels where text is burned into the video).
+- Links inside the content are identified and separated out for their own checking process.
+- Any images, video clips, or audio tracks attached to the post are identified and separated for media-specific analysis. For a video or reel, the system also pulls a handful of representative freeze-frames across the clip and extracts the audio track on its own, since video, its frames, and its audio each need different checks.
+- Any visible account information (handle, display name, follower count, verification badge, join date if shown) is captured.
+- Any location names or place references mentioned in the text are identified, since these matter for the disaster-verification path.
+- A record of this extracted content is created and stored in MongoDB, tagged with a content fingerprint (a hash of the text and media) so that if the same content is checked again — by this person or another — the system can reuse prior results instead of repeating expensive analysis from scratch.
+
+---
+
+## 4. Stage Three: Parallel Analysis
+
+Several independent checks run at the same time, each producing its own score and its own supporting evidence. Python coordinates these as parallel tasks so the person isn't waiting for one slow check to finish before the next one starts.
+
+### 4a. Claim and Text Verification
+The extracted text is compared against known fact-checked claims and against a continuously updated index of trustworthy news coverage. If the claim closely matches something already debunked, that's surfaced immediately. If it closely matches something corroborated by credible outlets, that's surfaced instead. If neither match is found — common for very recent or breaking content — the text is passed to a language-understanding step that looks for patterns typical of misinformation: manufactured urgency, emotionally manipulative phrasing, unverifiable absolute claims, and fabricated-sounding quotes. This fallback path is explicitly lower-confidence and is labeled as such rather than presented as a firm verdict.
+
+### 4b. Link and Scam Verification
+Any link in the content is checked against known threat-intelligence blacklists, checked for how recently its domain was registered (very new domains are a risk signal), checked for whether it mimics a known brand's domain name, and traced through any redirects to see where it actually leads. A cumulative risk score is produced from these signals together, since no single check is reliable alone.
+
+### 4c. Account and Bot Risk Assessment
+Visible account signals — account age, posting frequency, follower-to-following ratio, profile completeness, and content-duplication patterns — are assessed by a custom-trained classification model. This is treated as a genuine research problem rather than a solved one: legacy third-party bot-detection tools are no longer reliable against modern AI-driven accounts, so this model is trained and maintained in-house, retrained on a regular cadence, and its output is always presented as a *risk indicator* rather than a definitive judgment.
+
+### 4d. Image Verification
+Any still image is checked through reverse image search, to see whether it has circulated before in a different, unrelated context (a very common form of misinformation — real image, false caption), and through an AI-generation detector to flag whether the image itself is synthetic or manipulated. Any embedded metadata is compared against the location or date claimed in the post text.
+
+### 4e. Video and Reel Verification
+Video content is treated as two separate problems. First, sampled freeze-frames from across the clip are run through the same reverse-image and AI-generation checks used for still images — this is what catches old, unrelated footage being reposted as if it were current. Second, the whole clip is passed through a dedicated video-manipulation detector to catch deepfaked or synthetically generated video that a frame-by-frame check alone might miss. Because reels and short-form video are usually re-encoded by the platform and often stripped of original metadata, this stage relies almost entirely on content analysis rather than file metadata.
+
+### 4f. Audio Verification
+Any voice content — a WhatsApp voice note, a reel's audio track, or audio extracted from a video — is passed through a synthetic-speech detection model to identify voice cloning. This check is explicitly flagged as one of the least reliable in the pipeline: independent benchmarking has shown that detector accuracy varies widely and degrades against newer voice-cloning tools, so an audio result is always shown as a caution-level signal rather than a confident verdict. In parallel, the transcribed content of the audio is also passed through the same claim- and scam-pattern analysis used for text, since voice-based scams (impersonated relatives, fake officials, fake executives) tend to follow recognizable urgency-and-request patterns even when the voice itself is hard to classify.
+
+### 4g. Disaster and Emergency Verification
+If the content mentions a location or an emergency event, the system checks it against live official disaster and emergency feeds covering earthquakes, floods, storms, wildfires, and similar hazards. If an official source confirms the event, that is the strongest possible signal and is surfaced first. If no official confirmation exists yet but multiple independent, geographically distributed accounts are reporting the same event, that is surfaced as unconfirmed-but-corroborated, encouraging the person to watch official channels rather than treating it as settled either way.
+
+---
+
+## 5. Stage Four: Aggregation and Scoring
+
+The results from every relevant check (not every piece of content triggers every check — a text-only post skips the video and audio stages, for instance) are combined into a single weighted score. Claim accuracy and link safety are weighted most heavily, since they carry the clearest evidence; account risk and audio authenticity are weighted more cautiously, reflecting that those signals are inherently less certain today. The combined score maps to one of four plain verdicts, and the individual evidence behind each contributing check is retained so the person can see exactly why the verdict came out the way it did, not just the final number.
+
+---
+
+## 6. Stage Five: Presentation
+
+The result is shown as a simple color-coded verdict (green, yellow, or red) with a short handful of the most relevant reasons underneath — not a wall of technical detail. A person can expand the result to see the fuller evidence behind each check if they want it. The design goal is that the headline verdict and top reasons are understandable in a few seconds, with depth available only on request.
+
+---
+
+## 7. Stage Six: Feedback and Continuous Improvement
+
+If a person disagrees with a verdict or reports content for further review, that correction is stored alongside the original analysis record in MongoDB. These stored corrections form the training data used to periodically retrain the bot-risk and claim-plausibility models, which is especially important for the bot-detection component, since it has no reliable external source of truth and depends entirely on this internal feedback loop to stay current against new evasion tactics.
+
+---
+
+## 8. Role of MongoDB
+
+MongoDB serves as the system's memory across all six stages:
+- Storing structured records of captured and extracted content, keyed by a content fingerprint so repeated checks on the same post don't repeat expensive work.
+- Caching results from slower external checks (fact-check lookups, reverse image/video search, domain reputation) so identical content circulating widely across many users is only fully analyzed once.
+- Holding the evolving account-risk histories used to train and refine the bot-detection model over time.
+- Storing user feedback and correction records that feed the retraining cycle.
+- Its flexible, document-based structure suits this system well, since different content types (text post, image, video, voice note) naturally produce differently shaped analysis records rather than a single fixed table structure.
+
+---
+
+## 9. Role of Python
+
+Python serves as the coordination and intelligence layer across all six stages:
+- Orchestrating the parallel analysis checks so results return as they complete rather than in a fixed sequence.
+- Hosting and running the in-house-trained bot-risk and claim-plausibility models.
+- Coordinating calls out to specialized external services for the checks that are already well-solved (image/video/audio authenticity detection, domain reputation, official disaster feeds), so effort is concentrated on the parts of the system that genuinely require custom development.
+- Producing the final weighted verdict and assembling the evidence shown to the person.
+- Running the periodic retraining cycle that incorporates new feedback data into the account-risk and claim-analysis models.
