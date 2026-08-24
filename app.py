@@ -20,7 +20,7 @@ import json
 import os
 from flask import Flask, jsonify, request
 
-from modules import sentiment_analysis, trend_tracking, network_analysis, demographics, fusion
+import sentiment_analysis, trend_tracking, network_analysis, demographics, fusion
 
 app = Flask(__name__)
 

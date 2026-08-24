@@ -7,7 +7,7 @@ this module combines them into single, analyst-readable insights,
 e.g. "Region X is turning negative on Topic Y, amplified by Influencer Z".
 """
 
-from modules import sentiment_analysis, trend_tracking, network_analysis, demographics
+import sentiment_analysis, trend_tracking, network_analysis, demographics
 
 
 def generate_fused_report(posts: list) -> dict:
